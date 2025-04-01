@@ -1,0 +1,7 @@
+gym
+numpy
+pygame
+imageio
+pyopengl
+pyopengl_accelerate
+stable-baselines3

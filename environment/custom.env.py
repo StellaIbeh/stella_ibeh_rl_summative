@@ -2,133 +2,135 @@ import gym
 from gym import spaces
 import numpy as np
 
-class EvacuationEnv(gym.Env):
+class HypertensionMonitoringEnv(gym.Env):
     """
-    Custom Gym environment for a flood evacuation scenario.
-    The agent directs groups from a flood-affected area to safe zones.
+    Custom Gym environment for AI-powered remote monitoring of hypertension patients.
+    The agent observes vital parameters and chooses an action from a discrete set to
+    stabilize blood pressure.
     """
-    
     def __init__(self):
-        super(EvacuationEnv, self).__init__()
+        super(HypertensionMonitoringEnv, self).__init__()
         
-        # Define discrete action space with 8 possible actions
-        self.action_space = spaces.Discrete(8)
+        # Define action space: Discrete with 7 actions:
+        # 0: No medication, 1: Low-dose medication, 2: Moderate-dose medication,
+        # 3: High-dose medication, 4: Recommend rest, 5: Recommend exercise,
+        # 6: Call emergency response.
+        self.action_space = spaces.Discrete(7)
         
-        # Define observation space:
-        # State vector: [group_proximity, water_level, time_elapsed, safe_zone_occupancy]
-        # Values are normalized between 0 and 1
-        self.observation_space = spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32)
+        # Define observation space as a Box representing:
+        # [Systolic BP, Diastolic BP, Heart Rate, Stress Level, 
+        #  Physical Activity Level, Last Medication Level, Time Since Last Dose, Sleep Quality]
+        # For simplicity, we use normalized ranges for these values.
+        low = np.array([50, 30, 40, 0, 0, 0, 0, 0], dtype=np.float32)
+        high = np.array([200, 150, 180, 10, 2, 3, 120, 1], dtype=np.float32)
+        self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
         
-        # Initialize state variables
+        # Initialize state variables: starting with some average values.
         self.state = None
-        self.time_step = 0
-        self.max_time_steps = 50  # Example episode length
-        
         self.reset()
-    
+        self.time_step = 0
+
     def reset(self):
-        # Reset state: groups are near the flood (high proximity), water level moderate, time=0, safe zones empty
-        self.state = np.array([0.8, 0.5, 0.0, 0.0], dtype=np.float32)
+        # Reset the environment state to an initial condition.
+        # [SBP, DBP, HR, Stress, Physical Activity, Last Medication, Time since dose, Sleep Quality]
+        self.state = np.array([120, 80, 70, 5, 0, 0, 0, 1], dtype=np.float32)
         self.time_step = 0
         return self.state
-    
+
     def step(self, action):
-        reward = 0
+        """
+        Perform one step in the environment given the action.
+        """
+        sbp, dbp, hr, stress, phys_act, last_med, time_since, sleep = self.state
         
-        # Unpack state variables for readability
-        group_proximity, water_level, time_elapsed, safe_zone_occupancy = self.state
+        # Simulate the effect of random factors on patient vitals
+        sbp += np.random.uniform(-2, 2)
+        dbp += np.random.uniform(-1, 1)
+        hr += np.random.uniform(-1, 1)
+        stress += np.random.uniform(-0.5, 0.5)
+        # Clamp stress level
+        stress = np.clip(stress, 0, 10)
         
-        # Action definitions:
-        if action == 0:
-            # Scan Environment: Update state by "observing" changes
-            # (for simplicity, assume water level may change slightly)
-            water_level = np.clip(water_level + np.random.uniform(-0.05, 0.05), 0, 1)
-            reward += 0  # No immediate reward
-        elif action == 1:
-            # Direct Group to Safe Zone A
-            if group_proximity > 0.6:
-                # If group is close to hazard, proper instruction yields success
-                reward += 15
-                safe_zone_occupancy = np.clip(safe_zone_occupancy + 0.3, 0, 1)
-                group_proximity = np.clip(group_proximity - 0.3, 0, 1)
+        # Define effects for each action:
+        if action == 0:  # No medication
+            # Let natural fluctuations happen
+            reward = 0
+        elif action == 1:  # Low-dose medication
+            sbp -= 3
+            dbp -= 2
+            reward = 2
+        elif action == 2:  # Moderate-dose medication
+            sbp -= 5
+            dbp -= 3
+            reward = 4
+        elif action == 3:  # High-dose medication
+            sbp -= 8
+            dbp -= 5
+            reward = -2  # Risk of sudden drop causing hypotension
+        elif action == 4:  # Recommend rest
+            stress -= 1
+            reward = 2
+        elif action == 5:  # Recommend exercise
+            # Exercise can initially raise BP but is beneficial over time.
+            sbp += 2
+            dbp += 1
+            reward = 1
+        elif action == 6:  # Call emergency response
+            # Emergency response is beneficial only when BP is critical.
+            if sbp > 160 or dbp > 100 or sbp < 80 or dbp < 50:
+                reward = 10
             else:
-                reward -= 10
-        elif action == 2:
-            # Direct Group to Safe Zone B
-            if group_proximity > 0.6:
-                reward += 15
-                safe_zone_occupancy = np.clip(safe_zone_occupancy + 0.3, 0, 1)
-                group_proximity = np.clip(group_proximity - 0.3, 0, 1)
-            else:
-                reward -= 10
-        elif action == 3:
-            # Direct Group to Safe Zone C
-            if group_proximity > 0.6:
-                reward += 15
-                safe_zone_occupancy = np.clip(safe_zone_occupancy + 0.3, 0, 1)
-                group_proximity = np.clip(group_proximity - 0.3, 0, 1)
-            else:
-                reward -= 10
-        elif action == 4:
-            # Optimize Route (re-route groups)
-            # If water level is rising fast, good rerouting can save time
-            if water_level > 0.7:
-                reward += 5
-            else:
-                reward -= 15
-        elif action == 5:
-            # Send Rescue Team Alert: Provide extra support
-            # Extra support works best if hazard is high and groups are still at risk
-            if water_level > 0.6 and group_proximity > 0.5:
-                reward += 15
-            else:
-                reward -= 10
-        elif action == 6:
-            # Monitor Water Levels: Update state based on dynamic hazard
-            water_level = np.clip(water_level + np.random.uniform(-0.1, 0.1), 0, 1)
-            reward += 0  # No immediate reward
-        elif action == 7:
-            # Wait/Do Nothing: Opportunity cost for inaction
-            reward -= 5
+                reward = -5  # Unnecessary emergency call
         
-        # Simulate time progression and state changes
-        self.time_step += 1
-        time_elapsed = self.time_step / self.max_time_steps
-        
-        # Natural increase in hazard if groups remain near danger
-        if group_proximity > 0.5:
-            water_level = np.clip(water_level + 0.02, 0, 1)
-        
+        # Simulate time passage (affecting time since last medication)
+        time_since += 1
+        if action in [1, 2, 3]:
+            last_med = action  # record the medication level (1,2,or3)
+            time_since = 0
+
         # Update state
-        self.state = np.array([group_proximity, water_level, time_elapsed, safe_zone_occupancy], dtype=np.float32)
+        self.state = np.array([
+            np.clip(sbp, 50, 200),
+            np.clip(dbp, 30, 150),
+            np.clip(hr, 40, 180),
+            stress,
+            np.clip(phys_act, 0, 2),   # activity level: 0 (none), 1 (moderate), 2 (high)
+            last_med,
+            np.clip(time_since, 0, 120),
+            sleep  # assuming sleep quality remains constant in this simple model
+        ], dtype=np.float32)
+
+        # Additional reward shaping based on blood pressure stability:
+        optimal_sbp = (90, 120)
+        optimal_dbp = (60, 80)
+        if optimal_sbp[0] <= self.state[0] <= optimal_sbp[1] and optimal_dbp[0] <= self.state[1] <= optimal_dbp[1]:
+            reward += 10
+        elif self.state[0] > 130 or self.state[1] > 90 or self.state[0] < 80 or self.state[1] < 50:
+            reward -= 10
+
+        # Termination condition: we could define an episode length or critical vitals
+        self.time_step += 1
+        done = self.time_step >= 100  # example: end episode after 100 steps
         
-        # Define termination condition: either time has run out or all groups are safe
-        done = bool(self.time_step >= self.max_time_steps or safe_zone_occupancy >= 1.0)
-        
-        # Additional info can be provided here if needed
         info = {}
-        
         return self.state, reward, done, info
-    
+
     def render(self, mode='human'):
-        # Basic text-based rendering of the state
-        group_proximity, water_level, time_elapsed, safe_zone_occupancy = self.state
-        print(f"Time: {self.time_step}/{self.max_time_steps}")
-        print(f"Group Proximity to Hazard: {group_proximity:.2f}")
-        print(f"Water Level (Hazard Intensity): {water_level:.2f}")
-        print(f"Safe Zone Occupancy: {safe_zone_occupancy:.2f}")
-        print("-" * 30)
+        # For now, we print the state; later, integrate with PyOpenGL for 3D visualization.
+        print(f"Step: {self.time_step}, State: {self.state}")
+
+    def close(self):
+        pass
 
 # Example usage:
 if __name__ == "__main__":
-    env = EvacuationEnv()
+    env = HypertensionMonitoringEnv()
     state = env.reset()
     done = False
-    total_reward = 0
+
     while not done:
-        # For demonstration, we select a random action
+        # Here the agent randomly selects an action.
         action = env.action_space.sample()
-        state, reward, done, info = env.step(action)
-        total_reward += reward
+        state, reward, done, _ = env.step(action)
         env.render()
-    print("Episode finished. Total reward:", total_reward)
+    env.close()
